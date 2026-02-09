@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vocab Parser Diagnostic</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #fff;
+        }
+        .success { color: #4caf50; }
+        .error { color: #f44336; }
+        .warning { color: #ff9800; }
+        .info { color: #2196f3; }
+        pre {
+            background: #2d2d2d;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        h2 { color: #00bcd4; }
+    </style>
+</head>
+<body>
+    <h1>📊 Vocabulary Parser Diagnostic</h1>
+    <div id="output"></div>
+
+    <script>
+        async function runDiagnostic() {
+            const output = document.getElementById('output');
+            
+            try {
+                output.innerHTML += '<h2 class="info">Step 1: Fetching vocab.html...</h2>';
+                const response = await fetch('vocab.html');
+                const htmlText = await response.text();
+                output.innerHTML += `<p class="success">✅ Fetched ${(htmlText.length / 1024).toFixed(2)} KB</p>`;
+                
+                output.innerHTML += '<h2 class="info">Step 2: Parsing HTML...</h2>';
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlText, 'text/html');
+                output.innerHTML += '<p class="success">✅ HTML parsed successfully</p>';
+                
+                output.innerHTML += '<h2 class="info">Step 3: Finding exam sections...</h2>';
+                const examSections = doc.querySelectorAll('.exam-section');
+                output.innerHTML += `<p class="success">✅ Found ${examSections.length} exam sections</p>`;
+                
+                let totalQuestions = 0;
+                let totalParsedWords = 0;
+                let failedWords = [];
+                
+                examSections.forEach((section, sectionIndex) => {
+                    let examName = 'Unknown';
+                    if (section.classList.contains('exam-cgl')) examName = 'CGL';
+                    else if (section.classList.contains('exam-chsl')) examName = 'CHSL';
+                    else if (section.classList.contains('exam-mts')) examName = 'MTS';
+                    else if (section.classList.contains('exam-cpo')) examName = 'CPO';
+                    else if (section.classList.contains('exam-gd')) examName = 'GD';
+                    else if (section.classList.contains('exam-steno')) examName = 'Steno';
+                    else if (section.classList.contains('exam-je')) examName = 'JE';
+                    
+                    const questions = section.querySelectorAll('.q');
+                    totalQuestions += questions.length;
+                    
+                    output.innerHTML += `<h3>${examName}: ${questions.length} questions</h3>`;
+                    
+                    // Test first 3 questions from this section
+                    for (let i = 0; i < Math.min(3, questions.length); i++) {
+                        const q = questions[i];
+                        const word = q.querySelector('.q-word')?.textContent.trim() || '';
+                        
+                        let synonym = '';
+                        const opts = q.querySelectorAll('.opt');
+                        opts.forEach(opt => {
+                            const emTag = opt.querySelector('em');
+                            if (emTag && emTag.textContent.includes('✓')) {
+                                const strongTag = opt.querySelector('strong');
+                                if (strongTag) {
+                                    synonym = strongTag.textContent.trim();
+                                }
+                            }
+                        });
+                        
+                        if (word && synonym) {
+                            totalParsedWords++;
+                            output.innerHTML += `<p class="success">✅ ${word} → ${synonym}</p>`;
+                        } else {
+                            failedWords.push({
+                                exam: examName,
+                                word: word || '(no word)',
+                                synonym: synonym || '(no synonym found)',
+                                html: q.innerHTML.substring(0, 200)
+                            });
+                            output.innerHTML += `<p class="error">❌ Failed: ${word || '(no word)'}</p>`;
+                        }
+                    }
+                });
+                
+                output.innerHTML += '<h2 class="info">Summary:</h2>';
+                output.innerHTML += `<p>Total Questions Found: <strong>${totalQuestions}</strong></p>`;
+                output.innerHTML += `<p>Successfully Parsed: <strong class="success">${totalParsedWords}</strong></p>`;
+                output.innerHTML += `<p>Failed to Parse: <strong class="error">${failedWords.length}</strong></p>`;
+                
+                if (failedWords.length > 0) {
+                    output.innerHTML += '<h2 class="warning">Failed Words Details:</h2>';
+                    failedWords.forEach((fail, i) => {
+                        output.innerHTML += `<div style="background: #2d2d2d; padding: 10px; margin: 10px 0; border-left: 3px solid #f44336;">`;
+                        output.innerHTML += `<p><strong>Word:</strong> ${fail.word}</p>`;
+                        output.innerHTML += `<p><strong>Exam:</strong> ${fail.exam}</p>`;
+                        output.innerHTML += `<p><strong>Synonym Found:</strong> ${fail.synonym}</p>`;
+                        output.innerHTML += `<p><strong>HTML Sample:</strong></p><pre>${fail.html.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
+                        output.innerHTML += `</div>`;
+                    });
+                }
+                
+                // Test the exact parser from Index-Clean.html
+                output.innerHTML += '<h2 class="info">Step 4: Running Full Parser...</h2>';
+                const items = [];
+                const exams = {
+                    'cgl': { name: 'SSC CGL (Combined Graduate Level)', count: 0 },
+                    'chsl': { name: 'SSC CHSL (10+2 Level)', count: 0 },
+                    'mts': { name: 'SSC MTS (Multi Tasking Staff)', count: 0 },
+                    'cpo': { name: 'SSC CPO (Central Police Organisation)', count: 0 },
+                    'gd': { name: 'SSC GD (General Duty Constable)', count: 0 },
+                    'steno': { name: 'SSC Stenographer (Grade C & D)', count: 0 },
+                    'je': { name: 'SSC JE (Junior Engineer)', count: 0 },
+                    'common': { name: 'Common (All SSC Exams)', count: 0 }
+                };
+                
+                examSections.forEach(section => {
+                    let exam_code = 'common';
+                    if (section.classList.contains('exam-cgl')) exam_code = 'cgl';
+                    else if (section.classList.contains('exam-chsl')) exam_code = 'chsl';
+                    else if (section.classList.contains('exam-mts')) exam_code = 'mts';
+                    else if (section.classList.contains('exam-cpo')) exam_code = 'cpo';
+                    else if (section.classList.contains('exam-gd')) exam_code = 'gd';
+                    else if (section.classList.contains('exam-steno')) exam_code = 'steno';
+                    else if (section.classList.contains('exam-je')) exam_code = 'je';
+                    
+                    const exam_name = exams[exam_code].name;
+                    const questions = section.querySelectorAll('.q');
+                    
+                    questions.forEach(q => {
+                        const word = q.querySelector('.q-word')?.textContent.trim() || '';
+                        const hindiRaw = q.querySelector('.q-hindi')?.textContent || '';
+                        const hindi = hindiRaw.replace(/^[-\s]+/, '').replace(/\s*\/.*$/, '').trim();
+                        const englishRaw = q.querySelector('.q-eng')?.textContent || '';
+                        const english = englishRaw.replace(/^[\s()]+/, '').replace(/[\s()]+$/, '').trim();
+                        
+                        let type = 'synonym';
+                        let synonym = '';
+                        let synonym_hindi = '';
+                        
+                        const opts = q.querySelectorAll('.opt');
+                        opts.forEach(opt => {
+                            const emTag = opt.querySelector('em');
+                            if (emTag && emTag.textContent.includes('✓')) {
+                                const strongTag = opt.querySelector('strong');
+                                if (strongTag) {
+                                    synonym = strongTag.textContent.trim();
+                                }
+                                
+                                // Extract type from marker
+                                const emText = emTag.textContent;
+                                if (emText.includes('(s)')) {
+                                    type = 'synonym';
+                                } else if (emText.includes('(a)')) {
+                                    type = 'antonym';
+                                } else if (emText.includes('(i)') || emText.includes('(Idiom)')) {
+                                    type = 'idiom';
+                                } else if (emText.includes('(OWS)')) {
+                                    type = 'one-word-substitute';
+                                } else if (emText.includes('(p)') || emText.includes('(Phrase)')) {
+                                    type = 'phrase';
+                                } else if (word.includes(' ')) {
+                                    type = 'idiom';
+                                }
+                                
+                                synonym_hindi = emText
+                                    .replace(/✓/g, '')
+                                    .replace(/\([saipOWS]+\)/gi, '')
+                                    .replace(/\(.*?\)/g, '')
+                                    .trim();
+                            }
+                        });
+                        
+                        if (word && synonym) {
+                            items.push({
+                                word, hindi, english,
+                                synonym, synonym_hindi,
+                                exam_code, exam_name, type
+                            });
+                            exams[exam_code].count++;
+                        }
+                    });
+                });
+                
+                output.innerHTML += `<p class="success">✅ Full parser completed!</p>`;
+                output.innerHTML += `<p><strong>Total Items Parsed:</strong> ${items.length}</p>`;
+                
+                output.innerHTML += `<h3>Exam Breakdown:</h3>`;
+                Object.entries(exams).forEach(([code, exam]) => {
+                    if (exam.count > 0) {
+                        output.innerHTML += `<p>${exam.name}: <strong>${exam.count}</strong></p>`;
+                    }
+                });
+                
+                // Count by type
+                const typeCounts = {};
+                items.forEach(item => {
+                    typeCounts[item.type] = (typeCounts[item.type] || 0) + 1;
+                });
+                
+                output.innerHTML += `<h3>Type Breakdown:</h3>`;
+                const typeNames = {
+                    'synonym': 'Synonym',
+                    'antonym': 'Antonym',
+                    'one-word-substitute': 'One Word Substitute',
+                    'idiom': 'Idiom',
+                    'phrase': 'Phrase'
+                };
+                Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).forEach(([type, count]) => {
+                    const displayName = typeNames[type] || type;
+                    output.innerHTML += `<p>${displayName}: <strong>${count}</strong></p>`;
+                });
+                
+                output.innerHTML += `<h3>Sample Items:</h3><pre>${JSON.stringify(items.slice(0, 3), null, 2)}</pre>`;
+                
+            } catch (error) {
+                output.innerHTML += `<h2 class="error">❌ Error:</h2>`;
+                output.innerHTML += `<pre>${error.message}\n${error.stack}</pre>`;
+            }
+        }
+        
+        window.addEventListener('DOMContentLoaded', runDiagnostic);
+    </script>
+</body>
+</html>
